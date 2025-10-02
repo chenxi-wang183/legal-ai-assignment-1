@@ -69,13 +69,13 @@ with st.sidebar:
 
     if api_key_input:
         try:
-            Settings.llm = OpenAI(model="gpt-3.5-turbo", api_key=api_key_input)
-            Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small", api_key=api_key_input)
+            # When key is entered, set it for the AI models
+            os.environ["OPENAI_API_KEY"] = api_key_input
             if not st.session_state.api_key_configured:
                 st.session_state.api_key_configured = True
-                st.rerun()
+                st.rerun() # Rerun to remove the warning message
         except Exception as e:
-            st.error(f"Invalid API Key: {e}")
+            st.error(f"There was an error validating the API Key.")
             st.session_state.api_key_configured = False
     
     st.header("Search History")
@@ -131,6 +131,8 @@ else:
                     with open(temp_file_path, "wb") as f: f.write(uploaded_file.getbuffer())
                     documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
                     text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+                    Settings.llm = OpenAI(model="gpt-3.5-turbo") # Use a model that is definitely available
+                    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
                     index = VectorStoreIndex.from_documents(documents, transformations=[text_splitter])
                     st.session_state.rag_engine = index.as_query_engine(similarity_top_k=5)
                     st.session_state.last_uploaded_filename = uploaded_file.name
@@ -144,7 +146,7 @@ else:
         if st.session_state.rag_engine and question_to_run:
             with st.spinner("Thinking..."):
                 try:
-                    # Make sure the prompt is set correctly on the LLM before querying
+                    # Update system prompt on LLM before querying
                     Settings.llm.system_prompt = system_prompt
 
                     response_obj = st.session_state.rag_engine.query(question_to_run)
