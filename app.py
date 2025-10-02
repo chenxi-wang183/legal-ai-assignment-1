@@ -161,7 +161,7 @@ system_prompt = (
     "answer the question, you must ignore the a four-step format and instead state only: "
     "'Based on the provided document, I could not find a specific answer to this question.'"
 )
-Settings.llm = OpenAI(model="gpt-4o", system_prompt=system_prompt)
+Settings.llm = OpenAI(model="gpt-3.5-turbo", system_prompt=system_prompt)
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
 
