@@ -1,10 +1,6 @@
 streamlit
 openai
 python-dotenv
-langchain-core
-langchain-openai
-langchain-community
-chromadb
 llama-index
 pypdf
 python-docx

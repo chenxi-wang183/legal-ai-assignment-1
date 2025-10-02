@@ -1,3 +1,8 @@
+from openai_credentials import get_openai_credentials
+# --- Sidebar for OpenAI Credentials (as required by assignment) ---
+with st.sidebar:
+    st.header("API Credentials")
+    get_openai_credentials()
 import streamlit as st
 from dotenv import load_dotenv
 import os
@@ -12,7 +17,7 @@ st.set_page_config(page_title="Legal AI Assistant", layout="wide")
 
 
 # --- CUSTOM STYLES & ICONS ---
-
+# (This part remains the same)
 scales_svg = """
 <svg width="80" height="80" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M21 6L18.5 5M18.5 5L15 6M18.5 5V12M18.5 12L21 13M18.5 12L15 13M3 6L5.5 5M5.5 5L9 6M5.5 5V12M5.5 12L3 13M5.5 12L9 13M12 3V21M3 21H21" stroke="#1e3a8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -25,7 +30,6 @@ sources_svg = """
 </svg>
 """
 
-# Advanced CSS for the final design
 custom_css = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&display=swap');
@@ -65,7 +69,6 @@ custom_css = """
         align-items: center;
     }
     
-    /* Style the text input with white background and gray border */
     .stTextInput input {
         background-color: #ffffff !important;
         border: 1px solid #d1d5db; /* Gray border */
@@ -74,52 +77,49 @@ custom_css = """
         padding-left: 1rem;
     }
 
-    /* Aggressively style the file uploader to be JUST an icon button */
-    [data-testid="stFileUploader"] {
-        width: 3.5rem;
-        height: 3.5rem;
-    }
-    [data-testid="stFileUploader"] section {
-        border: none;
-        padding: 0;
-        width: 3.5rem;
-        height: 3.5rem;
-    }
-    [data-testid="stFileUploader"] section > input + div {
-        display: none; /* Hide "Drag and drop..." text */
-    }
+    [data-testid="stFileUploader"] { width: 3.5rem; height: 3.5rem; }
+    [data-testid="stFileUploader"] section { border: none; padding: 0; }
+    [data-testid="stFileUploader"] section > input + div { display: none; }
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] { display: none; }
     [data-testid="stFileUploader"] section button {
+        display: flex;
+        justify-content: center;
+        align-items: center;
         background-color: transparent !important;
-        color: #9ca3af !important;
         border: none !important;
-        width: 3.5rem !important;
-        height: 3.5rem !important;
-        font-size: 2rem !important; /* Make the icon larger */
+        color: #9ca3af !important;
         padding: 0 !important;
-        margin: 0 !important;
+        width: 3.5rem;
+        height: 3.5rem;
+        font-size: 0;
     }
     [data-testid="stFileUploader"] section button:hover {
         background-color: #eef2ff !important;
         color: #2563eb !important;
     }
+    [data-testid="stFileUploader"] section button::after {
+        content: '+';
+        font-size: 2.5rem;
+        font-weight: 300;
+        line-height: 1;
+    }
     
-    /* Style the analyze button to be an identical icon button */
-    .stButton>button.analyze-btn {
+    .stButton>button {
         background-color: transparent !important;
         color: #9ca3af !important;
         border: none !important;
         width: 3.5rem !important;
         height: 3.5rem !important;
-        font-size: 1.5rem !important; /* Make the icon larger */
+        font-size: 1.5rem !important;
         padding: 0 !important;
         margin: 0 !important;
     }
-    .stButton>button.analyze-btn:hover {
+    .stButton>button:hover {
         background-color: #eef2ff !important;
         color: #2563eb !important;
     }
-    /* --- End Search Bar Styling --- */
 
+    /* --- Response Area Styling --- */
     .response-container { font-size: 1.1rem; line-height: 1.7; }
     .stSidebar { background-color: #ffffff; }
 
@@ -201,7 +201,6 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     st.error("⚠️ Error: OpenAI API Key not found.")
 else:
-    # --- FINAL SEARCH BAR LAYOUT ---
     search_bar_cols = st.columns([1, 8, 1])
     
     with search_bar_cols[0]:
@@ -213,13 +212,8 @@ else:
             "Enter your question...", key="question_input", label_visibility="collapsed"
         )
     with search_bar_cols[2]:
-        # We add a dummy css_class argument that doesn't do anything
-        # but allows us to target this button specifically.
-        # The real styling is in the main CSS block.
         st.button("➤", on_click=trigger_analysis, key="analyze_button", help="Analyze the document", use_container_width=True)
 
-
-    # Indexing logic
     if uploaded_file:
         if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
             with st.spinner("Indexing the document..."):
@@ -235,7 +229,6 @@ else:
                 st.success("✅ Document indexed successfully!")
                 st.session_state.analysis_result = None
 
-    # Analysis logic
     if st.session_state.run_analysis:
         st.session_state.run_analysis = False
         question_to_run = st.session_state.get("question_input", "")
@@ -274,7 +267,6 @@ else:
         else:
             st.warning("⚠️ Please enter a question.")
 
-    # Display the result
     if st.session_state.analysis_result:
         response_obj, formatted_answer = st.session_state.analysis_result
         st.write("---")
@@ -282,12 +274,21 @@ else:
         st.markdown(formatted_answer, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # --- NEW: POLISHED SOURCE DISPLAY ---
         expander_title = f'<div style="display: flex; align-items: center; gap: 10px;">{sources_svg}<span>Show Cited Sources</span></div>'
         st.markdown(expander_title, unsafe_allow_html=True)
         with st.expander(" ", expanded=False):
             for i, node in enumerate(response_obj.source_nodes):
-                st.markdown(f"**Source {i+1} (Similarity: {node.score:.4f})**")
-                st.markdown(f"> {node.get_text()}")
-                st.write("---")
+                # Use a container with a border for each source to create a "card"
+                with st.container(border=True):
+                    # Try to display the page number from metadata
+                    page_label = node.metadata.get('page_label')
+                    if page_label:
+                        st.markdown(f"**Source from Page: {page_label}** (Similarity: {node.score:.4f})")
+                    else:
+                        st.markdown(f"**Source {i+1}** (Similarity: {node.score:.4f})")
+                    
+                    # Display the text content of the source
+                    st.write(node.get_text())
 
 st.markdown('</div>', unsafe_allow_html=True)
