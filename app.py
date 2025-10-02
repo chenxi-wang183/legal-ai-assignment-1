@@ -1,4 +1,4 @@
-from openai_credentials import get_openai_credentials
+from openai_credentials.api_key import get_openai_credentials
 # --- Sidebar for OpenAI Credentials (as required by assignment) ---
 with st.sidebar:
     st.header("API Credentials")
