@@ -9,6 +9,7 @@ from llama_index.core.node_parser import SentenceSplitter
 # --- PAGE CONFIGURATION (Must be the first command) ---
 st.set_page_config(page_title="Legal AI Assistant", layout="wide")
 
+
 # --- CUSTOM STYLES & ICONS ---
 scales_svg = """
 <svg width="80" height="80" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -61,23 +62,18 @@ def trigger_analysis():
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("API Credentials")
-    # Our manual, guaranteed-to-work implementation of the credentials module
     api_key_input = st.text_input(
-        "Enter your OpenAI API Key",
-        type="password",
-        key="api_key_input_sidebar",
-        label_visibility="collapsed",
-        placeholder="Enter your OpenAI API Key..."
+        "Enter your OpenAI API Key", type="password", key="api_key_input_sidebar",
+        label_visibility="collapsed", placeholder="Enter your OpenAI API Key..."
     )
 
     if api_key_input:
         try:
-            # When key is entered, set it for the AI models
             Settings.llm = OpenAI(model="gpt-3.5-turbo", api_key=api_key_input)
             Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small", api_key=api_key_input)
             if not st.session_state.api_key_configured:
                 st.session_state.api_key_configured = True
-                st.rerun() # Rerun to remove the warning message
+                st.rerun()
         except Exception as e:
             st.error(f"Invalid API Key: {e}")
             st.session_state.api_key_configured = False
@@ -100,11 +96,9 @@ st.markdown(f'<div style="text-align: center;">{scales_svg}</div>', unsafe_allow
 st.markdown('<p class="title">Legal AI Assistant</p>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Upload a legal document.<br>Ask a question.<br>Get a structured analysis.</p>', unsafe_allow_html=True)
 
-# Main app logic now checks if the key is configured
 if not st.session_state.api_key_configured:
     st.warning("Please enter your OpenAI API Key in the sidebar to begin.")
 else:
-    # --- SEARCH BAR AND FILE UPLOADER ---
     search_bar_cols = st.columns([1, 8, 1])
     with search_bar_cols[0]:
         uploaded_file = st.file_uploader("Upload", type=["pdf", "txt", "docx"], key="file_uploader", label_visibility="collapsed")
@@ -113,15 +107,22 @@ else:
     with search_bar_cols[2]:
         st.button("➤", on_click=trigger_analysis, key="analyze_button", help="Analyze the document", use_container_width=True)
 
-    # --- AI SYSTEM PROMPT (Needed here to be re-used) ---
     system_prompt = (
         "You are an expert legal AI assistant. Your task is to provide a detailed and structured "
         "analysis of a user's question based *only* on the provided text from a legal document. "
         "You must follow this four-step process for every answer:\n\n"
-        "[ANALYSIS]\n...\n[REASONING]\n...\n" # (Keeping it short for brevity, use your full prompt)
+        "[ANALYSIS]\n"
+        "First, break down the user's question into its core components...\n\n"
+        "[RELEVANT_CLAUSES]\n"
+        "Next, identify and quote the exact clause or clauses...\n\n"
+        "[DIRECT_ANSWER]\n"
+        "After quoting the relevant text, provide a direct, one-sentence summary answer...\n\n"
+        "[REASONING]\n"
+        "Finally, explain *why* the clause(s) you quoted lead to the direct answer...\n\n"
+        "**Crucial Rule:** If you cannot find any relevant information..., state only: "
+        "'Based on the provided document, I could not find a specific answer to this question.'"
     )
     
-    # Indexing logic
     if uploaded_file:
         if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
             with st.spinner("Indexing the document..."):
@@ -136,7 +137,6 @@ else:
                 st.success("✅ Document indexed successfully!")
                 st.session_state.analysis_result = None
 
-    # Analysis logic
     if st.session_state.run_analysis:
         st.session_state.run_analysis = False
         question_to_run = st.session_state.get("question_input", "")
@@ -144,7 +144,7 @@ else:
         if st.session_state.rag_engine and question_to_run:
             with st.spinner("Thinking..."):
                 try:
-                    # Update system prompt on LLM before querying
+                    # Make sure the prompt is set correctly on the LLM before querying
                     Settings.llm.system_prompt = system_prompt
 
                     response_obj = st.session_state.rag_engine.query(question_to_run)
@@ -178,7 +178,6 @@ else:
         else:
             st.warning("⚠️ Please enter a question.")
 
-    # Display the result
     if st.session_state.analysis_result:
         response_obj, formatted_answer = st.session_state.analysis_result
         st.write("---")
@@ -190,8 +189,12 @@ else:
         st.markdown(expander_title, unsafe_allow_html=True)
         with st.expander(" ", expanded=False):
             for i, node in enumerate(response_obj.source_nodes):
-                st.markdown(f"**Source {i+1} (Similarity: {node.score:.4f})**")
-                st.markdown(f"> {node.get_text()}")
-                st.write("---")
+                with st.container(border=True):
+                    page_label = node.metadata.get('page_label')
+                    if page_label:
+                        st.markdown(f"**Source from Page: {page_label}** (Similarity: {node.score:.4f})")
+                    else:
+                        st.markdown(f"**Source {i+1}** (Similarity: {node.score:.4f})")
+                    st.write(node.get_text())
 
 st.markdown('</div>', unsafe_allow_html=True)
