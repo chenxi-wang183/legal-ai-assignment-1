@@ -47,18 +47,9 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-
-# --- AI CONFIGURATION ---
-system_prompt = (
-    "You are a legal AI assistant. Your ONLY function is to answer questions based on provided text..." # (Keeping this collapsed for brevity)
-)
-
 # --- SESSION STATE & CALLBACKS ---
-if "rag_engine" not in st.session_state: st.session_state.rag_engine = None
-if "history" not in st.session_state: st.session_state.history = []
-if "analysis_result" not in st.session_state: st.session_state.analysis_result = None
-if "api_key" not in st.session_state: st.session_state.api_key = ""
-
+# (Unchanged from the final version)
+# ...
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -71,14 +62,11 @@ with st.sidebar:
     if api_key_input:
         st.session_state.api_key = api_key_input
         os.environ["OPENAI_API_KEY"] = api_key_input
-        # DEBUG: Confirm the key is received in the sidebar
-        st.info(f"Key received in sidebar, ending in: ...{api_key_input[-4:]}")
-    
-    st.header("Search History")
-    # (History display logic remains the same)
-    if st.button("Clear History"): st.session_state.history = []
-    # ...
+        st.info(f"Key received, ending in: ...{api_key_input[-4:]}")
 
+    st.header("Search History")
+    # (History logic unchanged)
+    # ...
 
 # --- MAIN PAGE UI ---
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -90,32 +78,28 @@ if not st.session_state.api_key:
     st.warning("Please enter your OpenAI API Key in the sidebar to begin.")
 else:
     # --- SEARCH BAR AND FILE UPLOADER ---
-    search_bar_cols = st.columns([1, 8, 1])
-    # (Search bar logic remains the same)
+    # (Unchanged)
     # ...
 
-    analyze_button_clicked = # (This will be defined within the columns)
-
+    # --- DOCUMENT INDEXING ---
     if uploaded_file:
-        # (Indexing logic remains the same)
+        # (Unchanged)
         # ...
-    
-    # --- ANALYSIS LOGIC ---
+
+    # --- QUERY LOGIC ---
     if analyze_button_clicked:
         if st.session_state.rag_engine and user_question:
             with st.spinner("Thinking..."):
                 try:
-                    # --- DEBUGGING BLOCK ---
+                    # --- DEBUGGING BLOCK AS PER TEACHER'S SUGGESTION ---
                     st.write("---")
                     st.subheader("🕵️‍♂️ Debugging Information")
                     
-                    # Set the models we want to use
-                    llm_model_name = "gpt-4o"
-                    embed_model_name = "text-embedding-3-small"
+                    llm_model_name = "gpt-4o" # Forcing gpt-4o for this test
                     
                     # Configure LlamaIndex Settings right before the call
-                    Settings.llm = OpenAI(model=llm_model_name, api_key=st.session_state.api_key, system_prompt=system_prompt)
-                    Settings.embed_model = OpenAIEmbedding(model=embed_model_name, api_key=st.session_state.api_key)
+                    Settings.llm = OpenAI(model=llm_model_name, api_key=st.session_state.api_key)
+                    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small", api_key=st.session_state.api_key)
 
                     st.info(f"**Attempting to use LLM:** `{Settings.llm.model}`")
                     st.info(f"**Using API Key ending in:** `...{st.session_state.api_key[-4:]}`")
@@ -124,14 +108,37 @@ else:
 
                     response_obj = st.session_state.rag_engine.query(user_question)
                     
-                    # (The rest of the response formatting logic remains the same)
+                    # (Response parsing and display logic remains the same)
                     # ...
 
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
-        # ... (rest of the logic)
+        # (Warning logic remains the same)
+        # ...
 
-    # (The results display logic remains the same)
+    # (Result display logic remains the same)
     # ...
-    
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- DISPLAY RESPONSE ---
+    if st.session_state.analysis_result:
+        response_obj, formatted_answer = st.session_state.analysis_result
+        st.write("---")
+        st.markdown('<div class="response-container">', unsafe_allow_html=True)
+        st.markdown(formatted_answer, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        expander_title = f'<div style="display: flex; align-items: center; gap: 10px;">{sources_svg}<span>Show Cited Sources</span></div>'
+        st.markdown(expander_title, unsafe_allow_html=True)
+        with st.expander(" ", expanded=False):
+            for i, node in enumerate(response_obj.source_nodes):
+                with st.container(border=True):
+                    page_label = node.metadata.get('page_label')
+                    if page_label:
+                        st.markdown(f"**Source from Page: {page_label}** (Similarity: {node.score:.4f})")
+                    else:
+                        st.markdown(f"**Source {i+1}** (Similarity: {node.score:.4f})")
+                    st.write(node.get_text())
+
 st.markdown('</div>', unsafe_allow_html=True)
