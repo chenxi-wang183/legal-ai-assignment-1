@@ -8,7 +8,7 @@ This project is a Retrieval-Augmented Generation (RAG) system built for the LAWS
 
 You can access the live application here:
 
-**[请在这里粘贴你最终部署成功的 Streamlit Cloud 网址]**
+**[(https://fluffy-enigma-x5gwpqqggrgvf9qp-8501.app.github.dev/)]**
 
 ---
 
