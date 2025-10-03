@@ -8,7 +8,7 @@ This project is a Retrieval-Augmented Generation (RAG) system built for the LAWS
 
 You can access the live application here:
 
-**[(https://fluffy-enigma-x5gwpqqggrgvf9qp-8501.app.github.dev/)]**
+**[(https://legal-ai-assignment-1.streamlit.app)]**
 
 ---
 
