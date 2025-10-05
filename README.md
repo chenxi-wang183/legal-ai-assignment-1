@@ -8,7 +8,7 @@ This project is a Retrieval-Augmented Generation (RAG) system built for the LAWS
 
 You can access the live application here:
 
-**[(https://legal-ai-assignment-1.streamlit.app)]**
+**[(https://legal-ai-assignment-1-79bgfs7jqrkjkqm7j5bmkx.streamlit.app/)]**
 
 ---
 
