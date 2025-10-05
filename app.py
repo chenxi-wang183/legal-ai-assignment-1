@@ -89,7 +89,7 @@ with st.sidebar:
         os.environ["OPENAI_API_KEY"] = api_key_input
         try:
             # Set the AI models with the new key. Using gpt-4 as requested.
-            Settings.llm = OpenAI(model="gpt-4o-mini", system_prompt=system_prompt)
+            Settings.llm = OpenAI(model="gpt-4o", system_prompt=system_prompt)
             Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
             st.success("✅ API Key set and configured!")
         except Exception as e:
