@@ -2,13 +2,41 @@ import streamlit as st
 import os
 import tempfile
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
-from llama_index.llms.openai import OpenAI
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.openai_like import OpenAILike
+from llama_index.embeddings.openai_like import OpenAILikeEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from pathlib import Path
 
 # --- PAGE CONFIGURATION (Must be the first command) ---
 st.set_page_config(page_title="Legal AI Assistant", layout="wide")
+
+
+# --- MODEL PROVIDER CONFIGURATION ---
+# All providers below expose an OpenAI-compatible API, so the same client code
+# works for each one - only the endpoint and the model names change.
+PROVIDERS = {
+    "Zhipu GLM (free)": {
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "llm_model": "glm-4-flash",
+        "embed_model": "embedding-3",
+        "context_window": 128000,
+        "key_hint": "open.bigmodel.cn",
+    },
+    "Google Gemini": {
+        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "llm_model": "gemini-2.0-flash",
+        "embed_model": "text-embedding-004",
+        "context_window": 1000000,
+        "key_hint": "aistudio.google.com",
+    },
+    "OpenAI": {
+        "api_base": "https://api.openai.com/v1",
+        "llm_model": "gpt-4o-mini",
+        "embed_model": "text-embedding-3-small",
+        "context_window": 128000,
+        "key_hint": "platform.openai.com",
+    },
+}
 
 
 # --- CUSTOM STYLES & ICONS ---
@@ -73,38 +101,76 @@ if "rag_engine" not in st.session_state: st.session_state.rag_engine = None
 if "history" not in st.session_state: st.session_state.history = []
 if "analysis_result" not in st.session_state: st.session_state.analysis_result = None
 if "api_key" not in st.session_state: st.session_state.api_key = ""
+if "provider" not in st.session_state: st.session_state.provider = ""
 if "last_uploaded_filename" not in st.session_state: st.session_state.last_uploaded_filename = None
+
+
+def configure_models(provider_name: str, api_key: str) -> None:
+    """Point LlamaIndex at the selected OpenAI-compatible endpoint."""
+    cfg = PROVIDERS[provider_name]
+
+    # Some LlamaIndex internals still read this variable, so keep it in sync.
+    os.environ["OPENAI_API_KEY"] = api_key
+
+    # OpenAILike is used instead of OpenAI because the OpenAI class validates the
+    # model name against a hard-coded list and rejects anything it does not know.
+    Settings.llm = OpenAILike(
+        model=cfg["llm_model"],
+        api_base=cfg["api_base"],
+        api_key=api_key,
+        is_chat_model=True,          # required, otherwise the completion endpoint is called
+        context_window=cfg["context_window"],
+        temperature=0.1,
+        timeout=120,
+        system_prompt=system_prompt,
+    )
+    Settings.embed_model = OpenAILikeEmbedding(
+        model_name=cfg["embed_model"],
+        api_base=cfg["api_base"],
+        api_key=api_key,
+        embed_batch_size=10,
+    )
 
 
 # --- SIDEBAR ---
 with st.sidebar:
+    st.header("Model Provider")
+    provider_name = st.selectbox(
+        "Provider", list(PROVIDERS.keys()), key="provider_select", label_visibility="collapsed"
+    )
+    st.caption(f"Get a key at {PROVIDERS[provider_name]['key_hint']}")
+
     st.header("API Credentials")
     api_key_input = st.text_input(
-        "Enter your OpenAI API Key", type="password", key="api_key_input_sidebar",
-        label_visibility="collapsed", placeholder="Enter your OpenAI API Key..."
+        "Enter your API Key", type="password", key="api_key_input_sidebar",
+        label_visibility="collapsed", placeholder="Enter your API Key..."
     )
 
-    if api_key_input and st.session_state.api_key != api_key_input:
-        st.session_state.api_key = api_key_input
-        os.environ["OPENAI_API_KEY"] = api_key_input
+    key_changed = api_key_input and api_key_input != st.session_state.api_key
+    provider_changed = provider_name != st.session_state.provider
+
+    if api_key_input and (key_changed or provider_changed):
         try:
-            # Set the AI models with the new key. Using gpt-4 as requested.
-            Settings.llm = OpenAI(model="gpt-4o-mini", system_prompt=system_prompt)
-            Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
-            st.success("✅ API Key set and configured!")
+            configure_models(provider_name, api_key_input)
+            st.session_state.api_key = api_key_input
+            st.session_state.provider = provider_name
+            st.success(f"✅ Connected to {provider_name}")
         except Exception as e:
             st.error(f"Failed to configure models. Please check your key. Error: {e}")
-            st.session_state.api_key = "" # Invalidate key on error
-        
-        # Reset engine when a new key is entered
+            st.session_state.api_key = ""  # Invalidate key on error
+            st.session_state.provider = ""
+
+        # Embedding dimensions differ between providers, so any existing index
+        # must be discarded and the document re-indexed.
         st.session_state.rag_engine = None
         st.session_state.last_uploaded_filename = None
-    
+        st.session_state.analysis_result = None
+
     st.header("Search History")
     if st.button("Clear History"):
         st.session_state.history = []
         st.rerun()
-    
+
     if not st.session_state.history:
         st.write("No searches yet.")
     else:
@@ -120,7 +186,7 @@ st.markdown('<p class="title">Legal AI Assistant</p>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Upload a legal document.<br>Ask a question.<br>Get a structured analysis.</p>', unsafe_allow_html=True)
 
 if not st.session_state.api_key:
-    st.warning("Please enter your OpenAI API Key in the sidebar to begin.")
+    st.warning("Please choose a provider and enter your API Key in the sidebar to begin.")
 else:
     # --- SEARCH BAR LAYOUT ---
     search_bar_cols = st.columns([1, 8, 1])
@@ -130,22 +196,25 @@ else:
         user_question = st.text_input("Enter your question...", key="question_input", label_visibility="collapsed")
     with search_bar_cols[2]:
         analyze_button_clicked = st.button("➤", key="analyze_button", help="Analyze the document", use_container_width=True)
-    
+
     # --- DOCUMENT INDEXING ---
     if uploaded_file:
         if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
             with st.spinner("Indexing the document..."):
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-                    with open(temp_file_path, "wb") as f: f.write(uploaded_file.getbuffer())
-                    
-                    documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
-                    text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
-                    index = VectorStoreIndex.from_documents(documents, transformations=[text_splitter])
-                    st.session_state.rag_engine = index.as_query_engine(similarity_top_k=5)
-                    st.session_state.last_uploaded_filename = uploaded_file.name
-                st.success("✅ Document indexed successfully!")
-                st.session_state.analysis_result = None
+                try:
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        temp_file_path = os.path.join(temp_dir, uploaded_file.name)
+                        with open(temp_file_path, "wb") as f: f.write(uploaded_file.getbuffer())
+
+                        documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
+                        text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+                        index = VectorStoreIndex.from_documents(documents, transformations=[text_splitter])
+                        st.session_state.rag_engine = index.as_query_engine(similarity_top_k=5)
+                        st.session_state.last_uploaded_filename = uploaded_file.name
+                    st.success("✅ Document indexed successfully!")
+                    st.session_state.analysis_result = None
+                except Exception as e:
+                    st.error(f"Indexing failed. This usually means the embedding model or the API key is not accepted. Error: {e}")
 
     # --- QUERY LOGIC ---
     if analyze_button_clicked:
@@ -154,7 +223,7 @@ else:
                 try:
                     response_obj = st.session_state.rag_engine.query(user_question)
                     response_text = str(response_obj)
-                    
+
                     parts = response_text.split('[')
                     analysis, clauses, answer, reasoning = "", "", "", ""
                     for part in parts:
@@ -162,7 +231,7 @@ else:
                         elif part.startswith("RELEVANT_CLAUSES]"): clauses = part.replace("RELEVANT_CLAUSES]", "").strip()
                         elif part.startswith("DIRECT_ANSWER]"): answer = part.replace("DIRECT_ANSWER]", "").strip()
                         elif part.startswith("REASONING]"): reasoning = part.replace("REASONING]", "").strip()
-                    
+
                     formatted_answer = ""
                     if analysis and clauses and answer and reasoning:
                         formatted_answer += f"<blockquote><b>Analysis & Reasoning:</b><br>{analysis}<br><br>{reasoning}</blockquote><hr>"
@@ -170,7 +239,7 @@ else:
                         formatted_answer += f"<b>Relevant Legal Clause(s):</b><br>{clauses}"
                     else:
                         formatted_answer = response_text
-                    
+
                     st.session_state.analysis_result = (response_obj, formatted_answer)
 
                     if not any(d['question'] == user_question for d in st.session_state.history):
@@ -190,7 +259,7 @@ else:
         st.markdown('<div class="response-container">', unsafe_allow_html=True)
         st.markdown(formatted_answer, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-        
+
         expander_title = f'<div style="display: flex; align-items: center; gap: 10px;">{sources_svg}<span>Show Cited Sources</span></div>'
         st.markdown(expander_title, unsafe_allow_html=True)
         with st.expander(" ", expanded=False):
@@ -204,4 +273,3 @@ else:
                     st.write(node.get_text())
 
 st.markdown('</div>', unsafe_allow_html=True)
-
