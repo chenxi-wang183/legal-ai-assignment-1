@@ -1,10 +1,30 @@
-import streamlit as st
 import os
+
+# --- NLTK DATA LOCATION (must run BEFORE importing llama_index) ---
+# LlamaIndex ships an nltk cache inside site-packages whose files are hardlinked.
+# Some sandboxed hosts refuse to open multiply-linked files, which breaks indexing
+# with a "Security Violation [pathsec.open]" error. Pointing NLTK_DATA at a normal
+# writable directory makes nltk find its data there first and never touch that cache.
+NLTK_DIR = "/tmp/nltk_data"
+os.environ["NLTK_DATA"] = NLTK_DIR
+os.makedirs(NLTK_DIR, exist_ok=True)
+try:
+    import nltk
+    nltk.data.path.insert(0, NLTK_DIR)
+    for _pkg in ("stopwords", "punkt", "punkt_tab"):
+        try:
+            nltk.download(_pkg, download_dir=NLTK_DIR, quiet=True)
+        except Exception:
+            pass
+except Exception:
+    pass
+
+import streamlit as st
 import tempfile
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.llms.openai_like import OpenAILike
 from llama_index.embeddings.openai_like import OpenAILikeEmbedding
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
 from pathlib import Path
 
 # --- PAGE CONFIGURATION (Must be the first command) ---
@@ -88,7 +108,10 @@ system_prompt = (
     "[RELEVANT_CLAUSES]\n"
     "Cite the exact clause number(s) and quote the original text verbatim.\n\n"
     "[DIRECT_ANSWER]\n"
-    "Provide a one-sentence summary answer, starting with 'Yes' or 'No', then state the core reason.\n\n"
+    "Provide a one-sentence summary answer. If the question is a yes/no question, start with "
+    "'Yes' or 'No' and then state the core reason. If it is an open question (for example asking "
+    "what a document covers, or asking you to summarise), give the summary directly instead of "
+    "forcing a Yes or No.\n\n"
     "[REASONING]\n"
     "Explain how the cited clauses logically lead to your direct answer.\n\n"
     "--- END OF FORMAT ---\n\n"
@@ -103,6 +126,18 @@ if "analysis_result" not in st.session_state: st.session_state.analysis_result =
 if "api_key" not in st.session_state: st.session_state.api_key = ""
 if "provider" not in st.session_state: st.session_state.provider = ""
 if "last_uploaded_filename" not in st.session_state: st.session_state.last_uploaded_filename = None
+
+
+def build_index(documents):
+    """Build the vector index, falling back to a splitter that does not use nltk."""
+    try:
+        splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+        return VectorStoreIndex.from_documents(documents, transformations=[splitter])
+    except Exception:
+        # SentenceSplitter relies on nltk data, which some hosts block. TokenTextSplitter
+        # splits on plain separators instead, so it always works - slightly rougher chunks.
+        splitter = TokenTextSplitter(chunk_size=512, chunk_overlap=50)
+        return VectorStoreIndex.from_documents(documents, transformations=[splitter])
 
 
 def configure_models(provider_name: str, api_key: str) -> None:
@@ -207,14 +242,22 @@ else:
                         with open(temp_file_path, "wb") as f: f.write(uploaded_file.getbuffer())
 
                         documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
-                        text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
-                        index = VectorStoreIndex.from_documents(documents, transformations=[text_splitter])
-                        st.session_state.rag_engine = index.as_query_engine(similarity_top_k=5)
+
+                        # PDF files carry a lot of XMP metadata (pdf:Keywords, pdfx:*, ...).
+                        # LlamaIndex embeds metadata together with the text, so those fields
+                        # compete with the actual clauses during retrieval. Keep only what is
+                        # useful for citing a source.
+                        keep_keys = {"page_label", "file_name"}
+                        for doc in documents:
+                            doc.metadata = {k: v for k, v in doc.metadata.items() if k in keep_keys}
+
+                        index = build_index(documents)
+                        st.session_state.rag_engine = index.as_query_engine(similarity_top_k=8)
                         st.session_state.last_uploaded_filename = uploaded_file.name
                     st.success("✅ Document indexed successfully!")
                     st.session_state.analysis_result = None
                 except Exception as e:
-                    st.error(f"Indexing failed. This usually means the embedding model or the API key is not accepted. Error: {e}")
+                    st.error(f"Indexing failed: {e}")
 
     # --- QUERY LOGIC ---
     if analyze_button_clicked:
