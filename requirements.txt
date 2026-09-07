@@ -7,3 +7,4 @@ python-docx
 llama-index-llms-openai-like
 llama-index-embeddings-openai-like
 nltk
+pdfplumber
