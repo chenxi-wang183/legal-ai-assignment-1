@@ -1,5 +1,4 @@
 
-App · PY
 import os
  
 # --- NLTK DATA LOCATION (must run BEFORE importing llama_index) ---
