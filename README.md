@@ -1,16 +1,11 @@
-
-
-Readme legal ai assistant · MD
 Legal AI Assistant
 面向长篇法律文件的检索增强问答工具:上传合同或条款文件,针对具体问题定位相关条款并输出结构化分析。
 
 A retrieval-augmented question answering tool for long legal documents. Upload a contract, ask a specific question, and get a structured analysis grounded in the retrieved clauses.
-
-在线体验 / Live app: https://legal-ai-assignment-1-vudcjwxygnshdknkpvnwvh.streamlit.app/
-Show Image
 <img width="1416" height="643" alt="image" src="https://github.com/user-attachments/assets/a8fcc7a3-f809-4851-baf6-6af9ba0153f7" />
 <img width="1395" height="596" alt="image" src="https://github.com/user-attachments/assets/f3c16b97-8610-47c1-88cd-f2ada7b28c87" />
 
+在线体验 / Live app: https://legal-ai-assignment-1-vudcjwxygnshdknkpvnwvh.streamlit.app/
 
 应用采用「用户自备 API Key」模式,在侧边栏选择模型供应商并填入自己的 Key 即可使用。 The app runs on a bring-your-own-key model: pick a provider in the sidebar and paste your own API key.
 
